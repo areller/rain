@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -42,22 +43,19 @@ func (t *Torrent) Name() string {
 	return t.torrent.Name()
 }
 
-// RootDirectory of the torrent.
-// The directory that contains the files in the torrent.
-func (t *Torrent) RootDirectory() string {
-	return t.torrent.RootDirectory()
+// Dir returns the directory that contains the files in the torrent.
+func (t *Torrent) Dir() string {
+	return t.torrent.Dir()
 }
 
-// The files in the torrent.
-// The paths of the files are relative to the root directory.
-func (t *Torrent) FilePaths() ([]string, error) {
-	return t.torrent.FilePaths()
-}
-
-// The files in the torrent with completion info. An error is returned
-// when metainfo isn't ready.
+// Files in the torrent. An error is returned when metainfo isn't ready.
 func (t *Torrent) Files() ([]File, error) {
 	return t.torrent.Files()
+}
+
+// FileStats returns statistics about each file in the torrent. An error is returned when torrent is not running.
+func (t *Torrent) FileStats() ([]FileStats, error) {
+	return t.torrent.FileStats()
 }
 
 // InfoHash returns the hash of the info dictionary of torrent file.
@@ -243,7 +241,7 @@ func (t *Torrent) Move(target string) error {
 		return fmt.Errorf("http error: %d", resp.StatusCode)
 	}
 	defer resp.Body.Close()
-	return t.torrent.session.RemoveTorrent(t.torrent.id)
+	return t.torrent.session.RemoveTorrent(t.torrent.id, true)
 }
 
 func (t *Torrent) prepareBody(pw *io.PipeWriter, mw *multipart.Writer, spec *boltdbresumer.Spec) {
@@ -293,8 +291,15 @@ func (t *Torrent) generateTar(pw *io.PipeWriter) {
 	var err error
 	defer func() { _ = pw.CloseWithError(err) }()
 
+	var root string
+	if provider, ok := t.torrent.session.storage.(*fileStorageProvider); !ok {
+		err = errors.New("session is not using file storage")
+		return
+	} else {
+		root = provider.getDataDir(t.torrent.id)
+	}
+
 	tw := tar.NewWriter(pw)
-	root := t.torrent.session.getDataDir(t.torrent.id)
 	walkFunc := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err

@@ -1,7 +1,11 @@
 rain
 ====
 
-BitTorrent client and library in Go. Running in production at [put.io](https://put.io).
+<img src="https://github.com/cenkalti/rain/raw/master/logo.png" width="100">
+
+---
+
+BitTorrent client and library in Go. Running in production at [put.io](putio-link) since 2019. Processing thousands of torrents every day.
 
 [![GoDoc](https://godoc.org/github.com/cenkalti/rain?status.svg)](https://pkg.go.dev/github.com/cenkalti/rain/torrent?tab=doc)
 [![GitHub Release](https://img.shields.io/github/release/cenkalti/rain.svg)](https://github.com/cenkalti/rain/releases)
@@ -53,6 +57,8 @@ Usage as library
 ----------------
 
 ```go
+import "github.com/cenkalti/rain/torrent"
+
 // Create a session
 ses, _ := torrent.NewSession(torrent.DefaultConfig)
 
@@ -80,13 +86,16 @@ See the description of values in here: [config.go](https://github.com/cenkalti/r
 Difference from other clients
 -----------------------------
 
-Rain is the main BitTorrent client used at [put.io](https://put.io).
+Rain is the main BitTorrent client used at [put.io](putio-link).
 It is designed to handle hundreds of torrents while using low system resources.
-The main difference from other clients is that Rain uses a separate peer port for each torrent.
+One notable difference from other clients is that Rain uses a separate peer port for each torrent.
 This allows Rain to download same torrent for multiple accounts in same private tracker and keep reporting their ratio correctly.
 
 Missing features
 ----------------
+
+The following features are not implemented in Rain, and this list should not be considered as a roadmap. These features are intentionally omitted either because they don't provide sufficient value for our use case at [put.io](putio-link), or because implementing them would add unnecessary complexity to the codebase. We prefer to maintain a focused and efficient implementation that serves our specific needs.
+
 - [IPv6 tracker extension](http://bittorrent.org/beps/bep_0007.html)
 - [IPv6 extension for DHT](http://bittorrent.org/beps/bep_0032.html)
 - [uTorrent transport protocol](http://bittorrent.org/beps/bep_0029.html)
@@ -96,3 +105,15 @@ Missing features
 - uPnP port forwarding
 - Selective downloading
 - Sequential downloading
+
+Contributing
+------------
+
+Rain is primarily developed to serve the specific requirements of [put.io](putio-link). Due to this focused purpose, feature requests that do not align with put.io's needs are likely to be rejected. Additionally, we maintain a strong preference for simplicity in implementation - complex solutions, even if technically superior, will generally not be accepted. Please keep these guidelines in mind when submitting issues or pull requests.
+
+Star History
+------------
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cenkalti/rain&type=Date)](https://star-history.com/#cenkalti/rain&Date)
+
+[putio-link]: https://put.io

@@ -89,7 +89,7 @@ func newTorrent(t *Torrent) rpctypes.Torrent {
 }
 
 func (h *rpcHandler) RemoveTorrent(args *rpctypes.RemoveTorrentRequest, reply *rpctypes.RemoveTorrentResponse) error {
-	return h.session.RemoveTorrent(args.ID)
+	return h.session.RemoveTorrent(args.ID, args.KeepData)
 }
 
 func (h *rpcHandler) GetMagnet(args *rpctypes.GetMagnetRequest, reply *rpctypes.GetMagnetResponse) error {
@@ -366,6 +366,47 @@ func (h *rpcHandler) GetTorrentWebseeds(args *rpctypes.GetTorrentWebseedsRequest
 	return nil
 }
 
+func (h *rpcHandler) GetTorrentFiles(args *rpctypes.GetTorrentFilesRequest, reply *rpctypes.GetTorrentFilesResponse) error {
+	t := h.session.GetTorrent(args.ID)
+	if t == nil {
+		return errTorrentNotFound
+	}
+	files, err := t.Files()
+	if err != nil {
+		return err
+	}
+	reply.Files = make([]rpctypes.File, len(files))
+	for i, f := range files {
+		reply.Files[i] = rpctypes.File{
+			Path:   f.Path(),
+			Length: f.Length(),
+		}
+	}
+	return nil
+}
+
+func (h *rpcHandler) GetTorrentFileStats(args *rpctypes.GetTorrentFileStatsRequest, reply *rpctypes.GetTorrentFileStatsResponse) error {
+	t := h.session.GetTorrent(args.ID)
+	if t == nil {
+		return errTorrentNotFound
+	}
+	stats, err := t.FileStats()
+	if err != nil {
+		return err
+	}
+	reply.FileStats = make([]rpctypes.FileStats, len(stats))
+	for i, s := range stats {
+		reply.FileStats[i] = rpctypes.FileStats{
+			File: rpctypes.File{
+				Path:   s.File.Path(),
+				Length: s.File.Length(),
+			},
+			BytesCompleted: s.BytesCompleted,
+		}
+	}
+	return nil
+}
+
 func (h *rpcHandler) StartTorrent(args *rpctypes.StartTorrentRequest, reply *rpctypes.StartTorrentResponse) error {
 	t := h.session.GetTorrent(args.ID)
 	if t == nil {
@@ -432,6 +473,15 @@ func (h *rpcHandler) MoveTorrent(args *rpctypes.MoveTorrentRequest, reply *rpcty
 }
 
 func (h *rpcHandler) handleMoveTorrent(w http.ResponseWriter, r *http.Request) {
+	var provider *fileStorageProvider
+	var ok bool
+	if provider, ok = h.session.storage.(*fileStorageProvider); !ok {
+		err := errors.New("session is not using file storage")
+		h.session.log.Error(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	port, err := h.session.getPort()
 	if err != nil {
 		h.session.log.Error(err)
@@ -482,7 +532,7 @@ func (h *rpcHandler) handleMoveTorrent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		err = h.session.stopAndRemoveData(t)
+		err = h.session.stopAndRemoveData(t, false)
 		if err != nil {
 			h.session.log.Error(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -520,7 +570,7 @@ func (h *rpcHandler) handleMoveTorrent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "data expected in multipart form", http.StatusBadRequest)
 		return
 	}
-	err = readData(p, h.session.getDataDir(id), h.session.config.FilePermissions)
+	err = readData(p, provider.getDataDir(id), h.session.config.FilePermissions)
 	if err != nil {
 		h.session.log.Error(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

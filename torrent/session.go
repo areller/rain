@@ -22,6 +22,7 @@ import (
 	"github.com/cenkalti/rain/internal/resourcemanager"
 	"github.com/cenkalti/rain/internal/resumer/boltdbresumer"
 	"github.com/cenkalti/rain/internal/semaphore"
+	"github.com/cenkalti/rain/internal/storage"
 	"github.com/cenkalti/rain/internal/tracker"
 	"github.com/cenkalti/rain/internal/trackermanager"
 	"github.com/juju/ratelimit"
@@ -42,6 +43,7 @@ var (
 type Session struct {
 	config         Config
 	db             *bbolt.DB
+	storage        storage.Provider
 	resumer        *boltdbresumer.Resumer
 	log            logger.Logger
 	extensions     [8]byte
@@ -202,6 +204,11 @@ func NewSession(cfg Config) (*Session, error) {
 			},
 		},
 	}
+	if cfg.CustomStorage != nil {
+		c.storage = cfg.CustomStorage
+	} else {
+		c.storage = newFileStorageProvider(&cfg)
+	}
 	dlSpeed := cfg.SpeedLimitDownload * 1024
 	if cfg.SpeedLimitDownload > 0 {
 		c.bucketDownload = ratelimit.NewBucketWithRate(float64(dlSpeed), dlSpeed)
@@ -339,10 +346,10 @@ func (s *Session) GetTorrent(id string) *Torrent {
 }
 
 // RemoveTorrent removes the torrent from the session and delete its files.
-func (s *Session) RemoveTorrent(id string) error {
+func (s *Session) RemoveTorrent(id string, keepData bool) error {
 	t, err := s.removeTorrentFromClient(id)
 	if t != nil {
-		err = s.stopAndRemoveData(t)
+		err = s.stopAndRemoveData(t, keepData)
 	}
 	return err
 }
@@ -382,9 +389,12 @@ func (s *Session) removeTorrentFromClient(id string) (*Torrent, error) {
 	})
 }
 
-func (s *Session) stopAndRemoveData(t *Torrent) error {
+func (s *Session) stopAndRemoveData(t *Torrent, keepData bool) error {
 	t.torrent.Close()
 	s.releasePort(t.torrent.port)
+	if keepData {
+		return nil
+	}
 	var err error
 	var dest string
 	if s.config.DataDirIncludesTorrentID {
@@ -441,11 +451,4 @@ func (s *Session) StopAll() error {
 		t.torrent.Stop()
 	}
 	return nil
-}
-
-func (s *Session) getDataDir(torrentID string) string {
-	if s.config.DataDirIncludesTorrentID {
-		return filepath.Join(s.config.DataDir, torrentID)
-	}
-	return s.config.DataDir
 }

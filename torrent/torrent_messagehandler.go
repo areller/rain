@@ -19,6 +19,11 @@ func (t *torrent) handlePieceMessage(pm peer.PieceMessage) {
 	msg := pm.Piece
 	pe := pm.Peer
 	l := int64(len(msg.Buffer.Data))
+	if pe.Closed {
+		t.bytesWasted.Inc(l)
+		msg.Buffer.Release()
+		return
+	}
 	if t.pieces == nil || t.bitfield == nil {
 		pe.Logger().Error("piece received but we don't have info")
 		t.bytesWasted.Inc(l)
@@ -97,7 +102,7 @@ func (t *torrent) handlePieceMessage(pm peer.PieceMessage) {
 	pe.StopSnubTimer()
 
 	if piece.Writing {
-		panic("piece is already writing")
+		t.crash("piece is already writing")
 	}
 	piece.Writing = true
 
@@ -350,7 +355,7 @@ func (t *torrent) handlePeerMessage(pm peer.Message) {
 		}
 		t.handleNewPeers(addrs, peersource.PEX)
 	default:
-		panic(fmt.Sprintf("unhandled peer message type: %T", msg))
+		t.crash(fmt.Sprintf("unhandled peer message type: %T", msg))
 	}
 }
 
