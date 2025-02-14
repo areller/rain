@@ -18,6 +18,7 @@ import (
 	_ "github.com/chihaya/chihaya/storage/memory"
 	"github.com/fortytw2/leaktest"
 	cp "github.com/otiai10/copy"
+	"github.com/rcrowley/go-metrics"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -128,7 +129,13 @@ func TestDownloadMagnet(t *testing.T) {
 }
 
 func TestDownloadTorrent(t *testing.T) {
-	// TODO defer leaktest.Check(t)()
+	// Prevents goroutine leak in metrics library.
+	// Issue: https://github.com/rcrowley/go-metrics/issues/300
+	// Workaround: https://github.com/IBM/sarama/issues/2861
+	metrics.UseNilMetrics = true
+	defer func() { metrics.UseNilMetrics = false }()
+
+	defer leaktest.Check(t)()
 	defer startHTTPTracker(t)()
 
 	_, cl := seeder(t, false)
@@ -151,7 +158,7 @@ func TestDownloadTorrent(t *testing.T) {
 	assertCompleted(t, tor)
 }
 
-func TestTorrentRootDirectory(t *testing.T) {
+func TestTorrentDir(t *testing.T) {
 	defer leaktest.Check(t)()
 	addr, cl := seeder(t, true)
 	defer cl()
@@ -162,7 +169,7 @@ func TestTorrentRootDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, filepath.Join(s.config.DataDir, tor.ID()), tor.RootDirectory())
+	assert.Equal(t, filepath.Join(s.config.DataDir, tor.ID()), tor.Dir())
 	assertCompleted(t, tor)
 }
 
@@ -177,27 +184,29 @@ func TestTorrentFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = tor.FilePaths()
-	assert.EqualError(t, err, "torrent metadata not ready")
 	_, err = tor.Files()
+	assert.EqualError(t, err, "torrent metadata not ready")
+	_, err = tor.FileStats()
 	assert.EqualError(t, err, "torrent not running so file stats unavailable")
+
 	waitForMetadata(t, tor)
-	files, err := tor.FilePaths()
+	files, err := tor.Files()
 	assert.NoError(t, err)
 	assert.Equal(t, 6, len(files))
-	assert.Equal(t, "sample_torrent/data/file1.bin", files[0])
+	assert.Equal(t, "sample_torrent/data/file1.bin", files[0].Path())
 	assertCompleted(t, tor)
+
 	// So that we're in running state again, which should allow
 	// Files() to return data.
 	tor.Start()
 	waitForStart(t, tor)
-	fileStats, err := tor.Files()
+	fileStats, err := tor.FileStats()
 	assert.NoError(t, err)
 	assert.Equal(t, 6, len(fileStats))
 	assert.Equal(t, "sample_torrent/data/file1.bin", fileStats[0].Path())
-	assert.Equal(t, int64(10240), fileStats[0].Stats().BytesTotal)
-	assert.Equal(t, int64(10240), fileStats[0].Stats().BytesCompleted)
-	assert.Equal(t, int64(10485760), fileStats[2].Stats().BytesCompleted)
+	assert.Equal(t, int64(10240), fileStats[0].File.Length())
+	assert.Equal(t, int64(10240), fileStats[0].BytesCompleted)
+	assert.Equal(t, int64(10485760), fileStats[2].BytesCompleted)
 	assertCompleted(t, tor)
 }
 
@@ -211,16 +220,21 @@ func startHTTPTracker(t *testing.T) (stop func()) {
 	}
 	lgc := middleware.NewLogic(responseConfig, ps, nil, nil)
 	fe, err := fhttp.NewFrontend(lgc, fhttp.Config{
-		Addr:         "127.0.0.1:5000",
-		ReadTimeout:  time.Second,
-		WriteTimeout: time.Second,
+		Addr:           "127.0.0.1:5000",
+		ReadTimeout:    time.Second,
+		WriteTimeout:   time.Second,
+		AnnounceRoutes: []string{"/announce"},
+		ScrapeRoutes:   []string{"/scrape"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return func() {
-		errC := fe.Stop()
-		err := <-errC
+		err := <-fe.Stop()
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = <-ps.Stop()
 		if err != nil {
 			t.Fatal(err)
 		}

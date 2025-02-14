@@ -96,8 +96,8 @@ func (c *Client) AddURI(uri string, options *AddTorrentOptions) (*rpctypes.Torre
 }
 
 // RemoveTorrent removes a torrent from remote Session and deletes its data.
-func (c *Client) RemoveTorrent(id string) error {
-	args := rpctypes.RemoveTorrentRequest{ID: id}
+func (c *Client) RemoveTorrent(id string, keepData bool) error {
+	args := rpctypes.RemoveTorrentRequest{ID: id, KeepData: keepData}
 	var reply rpctypes.RemoveTorrentResponse
 	return c.client.Call("Session.RemoveTorrent", args, &reply)
 }
@@ -161,6 +161,18 @@ func (c *Client) GetTorrentWebseeds(id string) ([]rpctypes.Webseed, error) {
 	args := rpctypes.GetTorrentWebseedsRequest{ID: id}
 	var reply rpctypes.GetTorrentWebseedsResponse
 	return reply.Webseeds, c.client.Call("Session.GetTorrentWebseeds", args, &reply)
+}
+
+func (c *Client) GetTorrentFiles(id string) ([]rpctypes.File, error) {
+	args := rpctypes.GetTorrentFilesRequest{ID: id}
+	var reply rpctypes.GetTorrentFilesResponse
+	return reply.Files, c.client.Call("Session.GetTorrentFiles", args, &reply)
+}
+
+func (c *Client) GetTorrentFileStats(id string) ([]rpctypes.FileStats, error) {
+	args := rpctypes.GetTorrentFileStatsRequest{ID: id}
+	var reply rpctypes.GetTorrentFileStatsResponse
+	return reply.FileStats, c.client.Call("Session.GetTorrentFileStats", args, &reply)
 }
 
 // StartTorrent starts the torrent.

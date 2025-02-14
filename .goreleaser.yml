@@ -1,3 +1,4 @@
+version: 2
 env:
   - GO111MODULE=on
 before:
@@ -16,9 +17,9 @@ builds:
     - amd64
 archives:
   - format: tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}"
-    replacements:
-      darwin: macos
+    name_template: >-
+      {{- .ProjectName }}_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{ else }}{{ .Os }}{{ end }}
     format_overrides:
       - goos: windows
         format: zip
@@ -33,10 +34,10 @@ changelog:
     - '^docs:'
     - '^test:'
 brews:
-  - tap:
+  - repository:
       owner: cenkalti
       name: homebrew-rain
-    folder: Formula
+    directory: Formula
     homepage:  https://github.com/cenkalti/rain
     description: BitTorrent client
     install: |

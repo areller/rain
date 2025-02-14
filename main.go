@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	// nolint: gosec
 	"io"
 	_ "net/http/pprof"
 	"os"
@@ -93,8 +92,7 @@ func main() {
 					Required: true,
 				},
 				cli.BoolFlag{
-					// TODO fix flag letter
-					Name:  "seed,d",
+					Name:  "seed,s",
 					Usage: "continue seeding after download is finished",
 				},
 				cli.StringFlag{
@@ -210,6 +208,9 @@ func main() {
 							Name:     "id",
 							Required: true,
 						},
+						cli.BoolFlag{
+							Name: "keep-data",
+						},
 					},
 				},
 				{
@@ -263,6 +264,30 @@ func main() {
 					Usage:    "get webseed sources of torrent",
 					Category: "Getters",
 					Action:   handleWebseeds,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:     "id",
+							Required: true,
+						},
+					},
+				},
+				{
+					Name:     "files",
+					Usage:    "get file list of torrent",
+					Category: "Getters",
+					Action:   handleFiles,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:     "id",
+							Required: true,
+						},
+					},
+				},
+				{
+					Name:     "file-stats",
+					Usage:    "get stats of files in torrent",
+					Category: "Getters",
+					Action:   handleFileStats,
 					Flags: []cli.Flag{
 						cli.StringFlag{
 							Name:     "id",
@@ -451,6 +476,13 @@ func main() {
 			Name:   "compact-database",
 			Usage:  "rewrite database to save up space",
 			Action: handleCompactDatabase,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "config,c",
+					Usage: "read config from `FILE`",
+					Value: "~/rain/config.yaml",
+				},
+			},
 		},
 		{
 			Name:  "torrent",
@@ -547,6 +579,8 @@ func handleCompactDatabase(c *cli.Context) error {
 		return err
 	}
 	cfg.ResumeOnStartup = false
+	cfg.RPCEnabled = false
+	cfg.DHTEnabled = false
 	ses, err := torrent.NewSession(cfg)
 	if err != nil {
 		return err
@@ -927,7 +961,7 @@ func handleAdd(c *cli.Context) error {
 }
 
 func handleRemove(c *cli.Context) error {
-	return clt.RemoveTorrent(c.String("id"))
+	return clt.RemoveTorrent(c.String("id"), c.Bool("keep-data"))
 }
 
 func handleCleanDatabase(c *cli.Context) error {
@@ -986,6 +1020,34 @@ func handleTrackers(c *cli.Context) error {
 
 func handleWebseeds(c *cli.Context) error {
 	resp, err := clt.GetTorrentWebseeds(c.String("id"))
+	if err != nil {
+		return err
+	}
+	b, err := prettyjson.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	_, _ = os.Stdout.Write(b)
+	_, _ = os.Stdout.WriteString("\n")
+	return nil
+}
+
+func handleFiles(c *cli.Context) error {
+	resp, err := clt.GetTorrentFiles(c.String("id"))
+	if err != nil {
+		return err
+	}
+	b, err := prettyjson.Marshal(resp)
+	if err != nil {
+		return err
+	}
+	_, _ = os.Stdout.Write(b)
+	_, _ = os.Stdout.WriteString("\n")
+	return nil
+}
+
+func handleFileStats(c *cli.Context) error {
+	resp, err := clt.GetTorrentFileStats(c.String("id"))
 	if err != nil {
 		return err
 	}
